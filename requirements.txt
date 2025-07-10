@@ -2,3 +2,4 @@ streamlit
 pillow
 pyzbar
 openpyxl
+opencv-python
