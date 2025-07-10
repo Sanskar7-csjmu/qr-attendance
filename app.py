@@ -1,14 +1,11 @@
-
 import streamlit as st
-from pyzbar.pyzbar import decode
-from PIL import Image
+import cv2
 import pandas as pd
-import io
+import tempfile
 import datetime
 
-st.set_page_config(page_title="QR Attendance (Cloud)", layout="centered")
-st.title("📸 QR Attendance System (Camera Supported)")
-st.caption("Scan QR code using your device camera.")
+st.set_page_config(page_title="QR Attendance (OpenCV)", layout="centered")
+st.title("📸 QR Attendance System (OpenCV-based)")
 
 # Load or initialize attendance data
 try:
@@ -16,10 +13,9 @@ try:
 except FileNotFoundError:
     attendance_df = pd.DataFrame(columns=[
         "Enrollment no", "Name", "Email", "Mobile", "Address",
-        "Father Name", "DOB", "Status", "Coupon Code", "Timestamp"
+        "Father Name", "DOB", "Status", "Timestamp"
     ])
 
-# Helper to parse QR content
 def parse_qr_data(data):
     info = {}
     for line in data.split("\n"):
@@ -28,33 +24,32 @@ def parse_qr_data(data):
             info[key.strip()] = value.strip()
     return info
 
-# Capture photo via camera
-img_file = st.camera_input("📷 Take Photo to Scan QR Code")
+uploaded_file = st.file_uploader("📂 Upload QR Code Image", type=["png", "jpg", "jpeg"])
 
-if img_file is not None:
-    image = Image.open(img_file)
-    decoded_objs = decode(image)
+if uploaded_file is not None:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        img_path = tmp_file.name
 
-    if decoded_objs:
-        qr_data = decoded_objs[0].data.decode('utf-8')
-        info = parse_qr_data(qr_data)
+    image = cv2.imread(img_path)
+    detector = cv2.QRCodeDetector()
+    data, points, _ = detector.detectAndDecode(image)
 
+    if data:
+        info = parse_qr_data(data)
         st.success("QR Code Scanned Successfully!")
         st.json(info)
 
         status = st.radio("Mark Attendance", ("Present", "Absent"))
-        coupon = st.text_input("🎟️ Enter Coupon Code (optional)")
 
         if st.button("✅ Submit"):
             info["Status"] = status
-            info["Coupon Code"] = coupon
             info["Timestamp"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             attendance_df.loc[len(attendance_df)] = info
             attendance_df.to_excel("attendance.xlsx", index=False)
             st.success("Attendance marked and saved!")
     else:
-        st.error("No valid QR code found in the image.")
+        st.error("No QR code detected in the image.")
 
-# Show attendance log
 if st.checkbox("📄 Show Attendance Log"):
     st.dataframe(attendance_df)
